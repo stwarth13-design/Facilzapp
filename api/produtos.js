@@ -1,4 +1,4 @@
-const FACILZAP_BASE = 'https://api.facilzap.com.br/v1';
+const FACILZAP_BASE = 'https://api.facilzap.app.br';
 
 export default async function handler(req, res) {
   const token = process.env.FACILZAP_TOKEN;
