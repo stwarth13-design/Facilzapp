@@ -48,11 +48,13 @@
     color:#0f1115; font-weight:700; font-size:13px; cursor:pointer; width:100%; margin-top:0;
   }
   .badge{display:inline-block;padding:2px 8px;border-radius:6px;background:rgba(255,255,255,0.08);font-size:10.5px;color:var(--muted);}
+  .live{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--jade);margin-right:6px;animation:pulse 2s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.3;}}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <span class="badge">Grafite &amp; Jade</span>
+  <span class="badge"><span class="live"></span>Atualiza a cada 30s</span>
   <h1>Pedidos por Data</h1>
   <p class="sub">Escolhe o dia (hoje, ontem, ou qualquer data) e consulta.</p>
 
@@ -112,7 +114,6 @@ function setActive(id) {
 
 async function carregar() {
   const dataAlvo = dataInput.value;
-  document.getElementById('conteudo').innerHTML = '<div class="loading">Carregando pedidos...</div>';
   document.getElementById('stats').style.display = 'none';
 
   try {
@@ -167,6 +168,7 @@ async function carregar() {
 }
 
 carregar();
+setInterval(carregar, 30000);
 </script>
 </body>
 </html>
