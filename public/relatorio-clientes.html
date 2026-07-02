@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FácilZap - Relatório de Clientes</title>
+<style>
+  :root{
+    --bg:#15171C; --card:#1c1f26; --jade:#19C39B; --coral:#FF6B5E; --gold:#E8B34C; --text:#EDEFF2; --muted:#8B93A1;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    background:var(--bg); color:var(--text); padding:20px 14px 60px; min-height:100vh;
+  }
+  .wrap{max-width:640px;margin:0 auto;}
+  h1{font-size:19px;margin:0 0 4px;}
+  h2{font-size:15px;margin:26px 0 12px;color:var(--jade);display:flex;align-items:center;gap:8px;}
+  p.sub{color:var(--muted);font-size:13px;margin:0 0 16px;}
+  .badge{display:inline-block;padding:2px 8px;border-radius:6px;background:rgba(255,255,255,0.08);font-size:10.5px;color:var(--muted);}
+  .stats{display:flex;gap:10px;margin-bottom:18px;}
+  .stat{flex:1;background:var(--card);border-radius:12px;padding:14px;text-align:center;border:1px solid rgba(255,255,255,0.06);}
+  .stat .num{font-size:20px;font-weight:700;color:var(--jade);}
+  .stat .lbl{font-size:10.5px;color:var(--muted);margin-top:2px;}
+  .cliente-card{
+    background:var(--card); border-radius:12px; padding:14px; margin-bottom:8px;
+    border:1px solid rgba(255,255,255,0.06); display:flex; align-items:center; gap:12px;
+  }
+  .rank{
+    width:28px;height:28px;border-radius:50%;background:rgba(25,195,155,0.15);color:var(--jade);
+    display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;
+  }
+  .rank.gold{background:rgba(232,179,76,0.18);color:var(--gold);}
+  .cliente-info{flex:1;min-width:0;}
+  .cliente-nome{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .cliente-meta{font-size:11.5px;color:var(--muted);margin-top:2px;}
+  .cliente-valor{text-align:right;flex-shrink:0;}
+  .cliente-valor .v{font-weight:700;color:var(--jade);font-size:14px;}
+  .cliente-valor .p{font-size:10.5px;color:var(--muted);}
+  .inativo{border-left:3px solid var(--coral);}
+  .inativo .cliente-valor .v{color:var(--coral);}
+  .loading{color:var(--muted);font-size:13px;padding:30px 0;text-align:center;}
+  .err{background:rgba(255,107,94,0.12);border:1px solid var(--coral);color:var(--coral);padding:12px;border-radius:9px;font-size:12px;white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,Menlo,monospace;}
+  button{
+    padding:12px; border-radius:10px; border:1px solid var(--jade); background:transparent;
+    color:var(--jade); font-weight:700; font-size:13px; cursor:pointer; width:100%; margin-top:12px;
+  }
+  .tabs{display:flex;gap:8px;margin-bottom:16px;}
+  .tab{flex:1;padding:10px;text-align:center;border-radius:9px;background:var(--card);border:1px solid rgba(255,255,255,0.08);color:var(--muted);font-size:12.5px;cursor:pointer;}
+  .tab.active{border-color:var(--jade);color:var(--jade);}
+  .section{display:none;}
+  .section.active{display:block;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="badge">Grafite &amp; Jade</span>
+  <h1>Relatório de Clientes</h1>
+  <p class="sub" id="periodo">Carregando...</p>
+
+  <div class="stats" id="stats" style="display:none">
+    <div class="stat"><div class="num" id="statTotalClientes">0</div><div class="lbl">Clientes</div></div>
+    <div class="stat"><div class="num" id="statAtivos">0</div><div class="lbl">Compraram no período</div></div>
+    <div class="stat"><div class="num" id="statInativos">0</div><div class="lbl">Sumidos</div></div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="top">Que Mais Compram</div>
+    <div class="tab" data-tab="sumidos">Sumidos</div>
+  </div>
+
+  <div id="conteudo" class="loading">Carregando clientes e pedidos... isso pode levar alguns segundos.</div>
+</div>
+
+<script>
+const API_BASE = '/api';
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.getElementById('section-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+function dataISO(offsetDias) {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDias);
+  return d.toISOString().split('T')[0];
+}
+
+async function carregar() {
+  const dataInicio = dataISO(-365);
+  const dataFim = dataISO(0);
+  document.getElementById('periodo').textContent = `Baseado em pedidos dos últimos 12 meses (${dataInicio.split('-').reverse().join('/')} até ${dataFim.split('-').reverse().join('/')})`;
+
+  try {
+    const [resClientes, resPedidos] = await Promise.all([
+      fetch(`${API_BASE}/clientes?length=200`),
+      fetch(`${API_BASE}/pedidos?filtros[data_inicial]=${dataInicio}&filtros[data_final]=${dataFim}&length=500`)
+    ]);
+
+    const dataClientes = await resClientes.json();
+    const dataPedidos = await resPedidos.json();
+
+    if (!resClientes.ok) {
+      document.getElementById('conteudo').innerHTML = `<div class="err">Erro ao carregar clientes:\n${JSON.stringify(dataClientes, null, 2)}</div>`;
+      return;
+    }
+    if (!resPedidos.ok) {
+      document.getElementById('conteudo').innerHTML = `<div class="err">Erro ao carregar pedidos:\n${JSON.stringify(dataPedidos, null, 2)}</div>`;
+      return;
+    }
+
+    const clientes = dataClientes.data || [];
+    const pedidos = dataPedidos.data || [];
+
+    // Agrega gasto e contagem de pedidos por cliente
+    const gastoPorCliente = {};
+    pedidos.forEach(p => {
+      const clienteId = p.cliente_id || (p.cliente && p.cliente.id) || null;
+      const whatsapp = (p.cliente && p.cliente.whatsapp) || p.whatsapp || null;
+      const chave = clienteId || whatsapp;
+      if (!chave) return;
+      const valor = parseFloat(p.total || p.valor_total || 0);
+      if (!gastoPorCliente[chave]) gastoPorCliente[chave] = { total: 0, qtd: 0 };
+      gastoPorCliente[chave].total += valor;
+      gastoPorCliente[chave].qtd += 1;
+    });
+
+    const hoje = new Date();
+    const clientesEnriquecidos = clientes.map(c => {
+      const chave = c.id || c.whatsapp;
+      const agregado = gastoPorCliente[c.id] || gastoPorCliente[c.whatsapp] || { total: 0, qtd: 0 };
+      let diasSemComprar = null;
+      if (c.ultima_compra) {
+        const dataUltima = new Date(c.ultima_compra.replace(' ', 'T'));
+        diasSemComprar = Math.floor((hoje - dataUltima) / (1000 * 60 * 60 * 24));
+      }
+      return { ...c, totalGasto: agregado.total, qtdPedidos: agregado.qtd, diasSemComprar };
+    });
+
+    const topCompradores = clientesEnriquecidos
+      .filter(c => c.totalGasto > 0)
+      .sort((a, b) => b.totalGasto - a.totalGasto)
+      .slice(0, 30);
+
+    const sumidos = clientesEnriquecidos
+      .filter(c => c.diasSemComprar === null || c.diasSemComprar > 60)
+      .sort((a, b) => (b.diasSemComprar || 9999) - (a.diasSemComprar || 9999))
+      .slice(0, 30);
+
+    document.getElementById('statTotalClientes').textContent = clientes.length;
+    document.getElementById('statAtivos').textContent = clientesEnriquecidos.filter(c => c.totalGasto > 0).length;
+    document.getElementById('statInativos').textContent = sumidos.length;
+    document.getElementById('stats').style.display = 'flex';
+
+    let html = `<div class="section active" id="section-top">`;
+    if (topCompradores.length === 0) {
+      html += `<div class="loading">Nenhum pedido com valor encontrado no período pra ranquear clientes.</div>`;
+    } else {
+      html += topCompradores.map((c, i) => `
+        <div class="cliente-card">
+          <div class="rank ${i < 3 ? 'gold' : ''}">${i + 1}</div>
+          <div class="cliente-info">
+            <div class="cliente-nome">${c.nome || 'Sem nome'}</div>
+            <div class="cliente-meta">${c.qtdPedidos} pedido${c.qtdPedidos !== 1 ? 's' : ''} · ${c.whatsapp || 'sem whatsapp'}</div>
+          </div>
+          <div class="cliente-valor">
+            <div class="v">R$ ${c.totalGasto.toFixed(2).replace('.', ',')}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+    html += `</div>`;
+
+    html += `<div class="section" id="section-sumidos">`;
+    if (sumidos.length === 0) {
+      html += `<div class="loading">Nenhum cliente sumido encontrado (todos compraram recentemente).</div>`;
+    } else {
+      html += sumidos.map(c => `
+        <div class="cliente-card inativo">
+          <div class="cliente-info">
+            <div class="cliente-nome">${c.nome || 'Sem nome'}</div>
+            <div class="cliente-meta">${c.whatsapp || 'sem whatsapp'}</div>
+          </div>
+          <div class="cliente-valor">
+            <div class="v">${c.diasSemComprar !== null ? c.diasSemComprar + 'd' : 'Nunca comprou'}</div>
+            <div class="p">${c.diasSemComprar !== null ? 'sem comprar' : ''}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+    html += `</div>`;
+
+    document.getElementById('conteudo').innerHTML = html;
+  } catch (e) {
+    document.getElementById('conteudo').innerHTML = `<div class="err">Falha na requisição:\n${e.message}</div>`;
+  }
+}
+
+carregar();
+</script>
+</body>
+</html>
