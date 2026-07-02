@@ -97,8 +97,8 @@ async function carregar() {
 
   try {
     const [resClientes, resPedidos] = await Promise.all([
-      fetch(`${API_BASE}/clientes?length=200`),
-      fetch(`${API_BASE}/pedidos?filtros[data_inicial]=${dataInicio}&filtros[data_final]=${dataFim}&length=500`)
+      fetch(`${API_BASE}/clientes?length=100`),
+      fetch(`${API_BASE}/pedidos?filtros[data_inicial]=${dataInicio}&filtros[data_final]=${dataFim}&length=100`)
     ]);
 
     const dataClientes = await resClientes.json();
