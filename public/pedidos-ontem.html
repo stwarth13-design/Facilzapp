@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FácilZap - Pedidos de Ontem</title>
+<style>
+  :root{
+    --bg:#15171C; --card:#1c1f26; --jade:#19C39B; --coral:#FF6B5E; --text:#EDEFF2; --muted:#8B93A1;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    background:var(--bg); color:var(--text); padding:20px 14px 60px; min-height:100vh;
+  }
+  .wrap{max-width:600px;margin:0 auto;}
+  h1{font-size:19px;margin:0 0 4px;}
+  p.sub{color:var(--muted);font-size:13px;margin:0 0 20px;}
+  .card{
+    background:var(--card); border-radius:14px; padding:16px; margin-bottom:12px;
+    border:1px solid rgba(255,255,255,0.06);
+  }
+  .stats{display:flex;gap:10px;margin-bottom:16px;}
+  .stat{flex:1;background:var(--card);border-radius:12px;padding:14px;text-align:center;border:1px solid rgba(255,255,255,0.06);}
+  .stat .num{font-size:22px;font-weight:700;color:var(--jade);}
+  .stat .lbl{font-size:11px;color:var(--muted);margin-top:2px;}
+  .pedido-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+  .pedido-codigo{font-weight:700;font-size:14px;}
+  .pedido-valor{color:var(--jade);font-weight:700;font-size:14px;}
+  .pedido-cliente{font-size:13px;color:var(--muted);}
+  .pedido-data{font-size:11.5px;color:var(--muted);margin-top:4px;}
+  .loading{color:var(--muted);font-size:13px;padding:20px 0;text-align:center;}
+  .empty{color:var(--muted);font-size:13px;padding:20px;text-align:center;}
+  .err{background:rgba(255,107,94,0.12);border:1px solid var(--coral);color:var(--coral);padding:12px;border-radius:9px;font-size:12.5px;white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,Menlo,monospace;}
+  button{
+    padding:12px; border-radius:10px; border:1px solid var(--jade); background:transparent;
+    color:var(--jade); font-weight:700; font-size:13px; cursor:pointer; width:100%; margin-top:10px;
+  }
+  .badge{display:inline-block;padding:2px 8px;border-radius:6px;background:rgba(255,255,255,0.08);font-size:10.5px;color:var(--muted);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="badge">Grafite &amp; Jade</span>
+  <h1>Pedidos de Ontem</h1>
+  <p class="sub" id="dataRef">Carregando...</p>
+
+  <div class="stats" id="stats" style="display:none">
+    <div class="stat"><div class="num" id="statCount">0</div><div class="lbl">Pedidos</div></div>
+    <div class="stat"><div class="num" id="statTotal">R$0</div><div class="lbl">Total</div></div>
+  </div>
+
+  <div id="conteudo" class="loading">Carregando pedidos...</div>
+  <button id="btnReload">Recarregar</button>
+</div>
+
+<script>
+const API_BASE = '/api';
+
+function getOntemISO() {
+  const hoje = new Date();
+  hoje.setDate(hoje.getDate() - 1);
+  const y = hoje.getFullYear();
+  const m = String(hoje.getMonth() + 1).padStart(2, '0');
+  const d = String(hoje.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+async function carregar() {
+  const ontem = getOntemISO();
+  document.getElementById('dataRef').textContent = 'Data: ' + ontem.split('-').reverse().join('/');
+  document.getElementById('conteudo').innerHTML = '<div class="loading">Carregando pedidos...</div>';
+  document.getElementById('stats').style.display = 'none';
+
+  try {
+    const res = await fetch(`${API_BASE}/pedidos?limit=100`);
+    const data = await res.json();
+
+    if (!res.ok) {
+      document.getElementById('conteudo').innerHTML =
+        `<div class="err">Erro ao carregar pedidos:\n${JSON.stringify(data, null, 2)}</div>`;
+      return;
+    }
+
+    const pedidos = Array.isArray(data) ? data : (data.data || []);
+    const pedidosOntem = pedidos.filter(p => {
+      const dataPedido = p.data || p.criado_em || p.created_at || '';
+      return dataPedido.startsWith(ontem);
+    });
+
+    if (pedidosOntem.length === 0) {
+      document.getElementById('conteudo').innerHTML =
+        `<div class="empty">Nenhum pedido encontrado para ontem.\n\n(Total de pedidos retornados pela API: ${pedidos.length})</div>`;
+      return;
+    }
+
+    let total = 0;
+    const html = pedidosOntem.map(p => {
+      const valor = parseFloat(p.total || p.valor_total || 0);
+      total += valor;
+      const cliente = (p.cliente && p.cliente.nome) || p.cliente_nome || 'Cliente não identificado';
+      const codigo = p.codigo || p.id || '—';
+      const dataStr = p.data || p.criado_em || '';
+      return `
+        <div class="card">
+          <div class="pedido-header">
+            <span class="pedido-codigo">#${codigo}</span>
+            <span class="pedido-valor">R$ ${valor.toFixed(2).replace('.', ',')}</span>
+          </div>
+          <div class="pedido-cliente">${cliente}</div>
+          <div class="pedido-data">${dataStr}</div>
+        </div>
+      `;
+    }).join('');
+
+    document.getElementById('conteudo').innerHTML = html;
+    document.getElementById('statCount').textContent = pedidosOntem.length;
+    document.getElementById('statTotal').textContent = 'R$' + total.toFixed(2).replace('.', ',');
+    document.getElementById('stats').style.display = 'flex';
+  } catch (e) {
+    document.getElementById('conteudo').innerHTML = `<div class="err">Falha na requisição:\n${e.message}</div>`;
+  }
+}
+
+document.getElementById('btnReload').addEventListener('click', carregar);
+carregar();
+</script>
+</body>
+</html>
