@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FácilZap - Cadastro de Produto</title>
+<style>
+  :root{
+    --bg:#15171C; --card:#1c1f26; --jade:#19C39B; --coral:#FF6B5E; --text:#EDEFF2; --muted:#8B93A1;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    background:var(--bg); color:var(--text); padding:20px 14px 60px; min-height:100vh;
+  }
+  .wrap{max-width:560px;margin:0 auto;}
+  h1{font-size:19px;margin:0 0 4px;}
+  h2{font-size:15px;margin:24px 0 10px;color:var(--jade);}
+  p.sub{color:var(--muted);font-size:13px;margin:0 0 20px;}
+  .card{
+    background:var(--card); border-radius:14px; padding:18px; margin-bottom:14px;
+    border:1px solid rgba(255,255,255,0.06);
+  }
+  label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:5px;margin-top:12px;}
+  label:first-child{margin-top:0;}
+  input[type=text], input[type=number], textarea{
+    width:100%; padding:11px 12px; border-radius:9px; border:1px solid rgba(255,255,255,0.12);
+    background:#0f1115; color:var(--text); font-size:14px; font-family:inherit;
+  }
+  textarea{min-height:90px; resize:vertical;}
+  input:focus, textarea:focus{outline:none;border-color:var(--jade);}
+  button{
+    padding:13px; border-radius:10px; border:none; background:var(--jade);
+    color:#0f1115; font-weight:700; font-size:14px; cursor:pointer; width:100%; margin-top:16px;
+  }
+  button.secondary{background:transparent;border:1px solid var(--jade);color:var(--jade);}
+  button:disabled{opacity:0.5;}
+  .catalogo-row{
+    display:flex; align-items:center; justify-content:space-between; padding:10px 12px;
+    background:#0f1115; border-radius:9px; margin-bottom:8px; font-size:13.5px;
+  }
+  .catalogo-row span.id{color:var(--muted);font-size:11.5px;}
+  .result{
+    margin-top:14px; padding:12px; border-radius:9px; font-size:12.5px; white-space:pre-wrap;
+    word-break:break-word; font-family:ui-monospace,Menlo,monospace; display:none;
+  }
+  .ok{background:rgba(25,195,155,0.12); border:1px solid var(--jade); color:var(--jade);}
+  .err{background:rgba(255,107,94,0.12); border:1px solid var(--coral); color:var(--coral);}
+  .loading{color:var(--muted); font-size:13px; padding:10px 0;}
+  .badge{display:inline-block;padding:2px 8px;border-radius:6px;background:rgba(255,255,255,0.08);font-size:10.5px;color:var(--muted);}
+  .catrow-inputs{display:flex;gap:8px;align-items:center;}
+  .catrow-inputs input{width:90px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="badge">Grafite &amp; Jade</span>
+  <h1>Cadastro de Produto — FácilZap</h1>
+  <p class="sub">Puxa seus catálogos reais e cadastra o produto com preços por catálogo.</p>
+
+  <div class="card">
+    <h2 style="margin-top:0">1. Seus catálogos</h2>
+    <div id="catalogosLoading" class="loading">Carregando catálogos...</div>
+    <div id="catalogosList"></div>
+    <button class="secondary" id="btnReload" style="display:none">Recarregar catálogos</button>
+  </div>
+
+  <div class="card" id="formCard" style="display:none">
+    <h2 style="margin-top:0">2. Dados do produto</h2>
+
+    <label for="nome">Nome</label>
+    <input type="text" id="nome" placeholder="Nome do produto">
+
+    <label for="descricao">Descrição (HTML permitido)</label>
+    <textarea id="descricao" placeholder="Descrição"></textarea>
+
+    <label for="estoque">Estoque</label>
+    <input type="number" id="estoque" value="1">
+
+    <h2>3. Preços por catálogo</h2>
+    <div id="precosPorCatalogo"></div>
+
+    <button id="btnCriar">Cadastrar Produto</button>
+    <div id="resultCriar" class="result"></div>
+  </div>
+</div>
+
+<script>
+const API_BASE = '/api';
+let catalogos = [];
+
+async function carregarCatalogos() {
+  document.getElementById('catalogosLoading').style.display = 'block';
+  document.getElementById('catalogosList').innerHTML = '';
+  document.getElementById('btnReload').style.display = 'none';
+  document.getElementById('formCard').style.display = 'none';
+
+  try {
+    const res = await fetch(`${API_BASE}/catalogos`);
+    const data = await res.json();
+    document.getElementById('catalogosLoading').style.display = 'none';
+
+    if (!res.ok) {
+      document.getElementById('catalogosList').innerHTML =
+        `<div class="result err" style="display:block">Erro ao carregar catálogos:\n${JSON.stringify(data, null, 2)}</div>`;
+      document.getElementById('btnReload').style.display = 'block';
+      return;
+    }
+
+    catalogos = Array.isArray(data) ? data : (data.data || []);
+    if (catalogos.length === 0) {
+      document.getElementById('catalogosList').innerHTML = '<div class="loading">Nenhum catálogo encontrado.</div>';
+      document.getElementById('btnReload').style.display = 'block';
+      return;
+    }
+
+    renderCatalogos();
+    renderPrecoInputs();
+    document.getElementById('formCard').style.display = 'block';
+    document.getElementById('btnReload').style.display = 'block';
+  } catch (e) {
+    document.getElementById('catalogosLoading').style.display = 'none';
+    document.getElementById('catalogosList').innerHTML =
+      `<div class="result err" style="display:block">Falha na requisição:\n${e.message}</div>`;
+    document.getElementById('btnReload').style.display = 'block';
+  }
+}
+
+function renderCatalogos() {
+  const el = document.getElementById('catalogosList');
+  el.innerHTML = catalogos.map(c =>
+    `<div class="catalogo-row"><span>${c.nome || c.name || 'Sem nome'}</span><span class="id">ID: ${c.id}</span></div>`
+  ).join('');
+}
+
+function renderPrecoInputs() {
+  const el = document.getElementById('precosPorCatalogo');
+  el.innerHTML = catalogos.map(c => `
+    <div class="catrow-inputs" style="margin-bottom:8px;">
+      <span style="flex:1;font-size:13px;">${c.nome || c.name || 'Catálogo ' + c.id}</span>
+      <input type="number" step="0.01" placeholder="R$ 0,00" data-catalogo-id="${c.id}" class="preco-input">
+    </div>
+  `).join('');
+}
+
+document.getElementById('btnReload').addEventListener('click', carregarCatalogos);
+
+document.getElementById('btnCriar').addEventListener('click', async () => {
+  const nome = document.getElementById('nome').value.trim();
+  const descricao = document.getElementById('descricao').value.trim();
+  const estoque = parseInt(document.getElementById('estoque').value) || 0;
+  const resultBox = document.getElementById('resultCriar');
+  const btn = document.getElementById('btnCriar');
+
+  if (!nome) {
+    showResult('err', 'Preenche o nome do produto.');
+    return;
+  }
+
+  const precoInputs = document.querySelectorAll('.preco-input');
+  const catalogosPayload = [];
+  precoInputs.forEach(inp => {
+    const val = parseFloat(inp.value);
+    if (!isNaN(val) && val > 0) {
+      catalogosPayload.push({
+        id: parseInt(inp.dataset.catalogoId),
+        ativado: true,
+        precos: { preco: val }
+      });
+    }
+  });
+
+  if (catalogosPayload.length === 0) {
+    showResult('err', 'Preenche pelo menos um preço de catálogo.');
+    return;
+  }
+
+  const payload = {
+    nome: nome,
+    descricao: descricao,
+    ativado: true,
+    estoque: { controlar_estoque: true, estoque: estoque },
+    catalogos: catalogosPayload
+  };
+
+  btn.disabled = true;
+  btn.textContent = 'Cadastrando...';
+  resultBox.style.display = 'none';
+
+  try {
+    const res = await fetch(`${API_BASE}/produtos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+
+    if (res.ok) {
+      showResult('ok', 'Produto cadastrado com sucesso!\n\n' + JSON.stringify(data, null, 2).slice(0, 1000));
+    } else {
+      showResult('err', 'Erro ao cadastrar. Status ' + res.status + '\n\n' + JSON.stringify(data, null, 2).slice(0, 1000));
+    }
+  } catch (e) {
+    showResult('err', 'Falha na requisição:\n' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Cadastrar Produto';
+  }
+});
+
+function showResult(type, msg) {
+  const box = document.getElementById('resultCriar');
+  box.className = 'result ' + type;
+  box.textContent = msg;
+  box.style.display = 'block';
+}
+
+carregarCatalogos();
+</script>
+</body>
+</html>
