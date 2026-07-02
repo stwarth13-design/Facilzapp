@@ -23,12 +23,12 @@
   }
   label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:5px;margin-top:12px;}
   label:first-child{margin-top:0;}
-  input[type=text], input[type=number], textarea{
+  input[type=text], input[type=number], textarea, select{
     width:100%; padding:11px 12px; border-radius:9px; border:1px solid rgba(255,255,255,0.12);
     background:#0f1115; color:var(--text); font-size:14px; font-family:inherit;
   }
   textarea{min-height:90px; resize:vertical;}
-  input:focus, textarea:focus{outline:none;border-color:var(--jade);}
+  input:focus, textarea:focus, select:focus{outline:none;border-color:var(--jade);}
   button{
     padding:13px; border-radius:10px; border:none; background:var(--jade);
     color:#0f1115; font-weight:700; font-size:14px; cursor:pointer; width:100%; margin-top:16px;
@@ -50,19 +50,20 @@
   .badge{display:inline-block;padding:2px 8px;border-radius:6px;background:rgba(255,255,255,0.08);font-size:10.5px;color:var(--muted);}
   .catrow-inputs{display:flex;gap:8px;align-items:center;}
   .catrow-inputs input{width:90px;}
+  .dim-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 </style>
 </head>
 <body>
 <div class="wrap">
   <span class="badge">Grafite &amp; Jade</span>
   <h1>Cadastro de Produto — FácilZap</h1>
-  <p class="sub">Puxa seus catálogos reais e cadastra o produto com preços por catálogo.</p>
+  <p class="sub">Puxa seus catálogos e categorias reais e cadastra o produto.</p>
 
   <div class="card">
     <h2 style="margin-top:0">1. Seus catálogos</h2>
     <div id="catalogosLoading" class="loading">Carregando catálogos...</div>
     <div id="catalogosList"></div>
-    <button class="secondary" id="btnReload" style="display:none">Recarregar catálogos</button>
+    <button class="secondary" id="btnReload">Recarregar tudo</button>
   </div>
 
   <div class="card" id="formCard" style="display:none">
@@ -73,6 +74,17 @@
 
     <label for="descricao">Descrição (HTML permitido)</label>
     <textarea id="descricao" placeholder="Descrição"></textarea>
+
+    <label for="categoria">Categoria</label>
+    <select id="categoria"></select>
+
+    <label>Dimensões e peso</label>
+    <div class="dim-grid">
+      <div><label style="margin-top:6px">Comprimento (cm)</label><input type="number" id="comprimento" value="15"></div>
+      <div><label style="margin-top:6px">Altura (cm)</label><input type="number" id="altura" value="10"></div>
+      <div><label style="margin-top:6px">Largura (cm)</label><input type="number" id="largura" value="10"></div>
+      <div><label style="margin-top:6px">Peso (g)</label><input type="number" id="peso" value="300"></div>
+    </div>
 
     <label for="estoque">Estoque</label>
     <input type="number" id="estoque" value="1">
@@ -88,41 +100,39 @@
 <script>
 const API_BASE = '/api';
 let catalogos = [];
+let categorias = [];
 
-async function carregarCatalogos() {
+async function carregarTudo() {
   document.getElementById('catalogosLoading').style.display = 'block';
   document.getElementById('catalogosList').innerHTML = '';
-  document.getElementById('btnReload').style.display = 'none';
   document.getElementById('formCard').style.display = 'none';
 
   try {
-    const res = await fetch(`${API_BASE}/catalogos`);
-    const data = await res.json();
+    const [resCat, resCateg] = await Promise.all([
+      fetch(`${API_BASE}/catalogos`),
+      fetch(`${API_BASE}/categorias`)
+    ]);
+    const dataCat = await resCat.json();
+    const dataCateg = await resCateg.json();
     document.getElementById('catalogosLoading').style.display = 'none';
 
-    if (!res.ok) {
+    if (!resCat.ok) {
       document.getElementById('catalogosList').innerHTML =
-        `<div class="result err" style="display:block">Erro ao carregar catálogos:\n${JSON.stringify(data, null, 2)}</div>`;
-      document.getElementById('btnReload').style.display = 'block';
+        `<div class="result err" style="display:block">Erro catálogos:\n${JSON.stringify(dataCat, null, 2)}</div>`;
       return;
     }
 
-    catalogos = Array.isArray(data) ? data : (data.data || []);
-    if (catalogos.length === 0) {
-      document.getElementById('catalogosList').innerHTML = '<div class="loading">Nenhum catálogo encontrado.</div>';
-      document.getElementById('btnReload').style.display = 'block';
-      return;
-    }
+    catalogos = Array.isArray(dataCat) ? dataCat : (dataCat.data || []);
+    categorias = Array.isArray(dataCateg) ? dataCateg : (dataCateg.data || []);
 
     renderCatalogos();
     renderPrecoInputs();
+    renderCategorias();
     document.getElementById('formCard').style.display = 'block';
-    document.getElementById('btnReload').style.display = 'block';
   } catch (e) {
     document.getElementById('catalogosLoading').style.display = 'none';
     document.getElementById('catalogosList').innerHTML =
       `<div class="result err" style="display:block">Falha na requisição:\n${e.message}</div>`;
-    document.getElementById('btnReload').style.display = 'block';
   }
 }
 
@@ -130,6 +140,17 @@ function renderCatalogos() {
   const el = document.getElementById('catalogosList');
   el.innerHTML = catalogos.map(c =>
     `<div class="catalogo-row"><span>${c.nome || c.name || 'Sem nome'}</span><span class="id">ID: ${c.id}</span></div>`
+  ).join('');
+}
+
+function renderCategorias() {
+  const el = document.getElementById('categoria');
+  if (categorias.length === 0) {
+    el.innerHTML = '<option value="">Nenhuma categoria encontrada</option>';
+    return;
+  }
+  el.innerHTML = categorias.map(c =>
+    `<option value="${c.id}">${c.nome || c.name}</option>`
   ).join('');
 }
 
@@ -143,12 +164,17 @@ function renderPrecoInputs() {
   `).join('');
 }
 
-document.getElementById('btnReload').addEventListener('click', carregarCatalogos);
+document.getElementById('btnReload').addEventListener('click', carregarTudo);
 
 document.getElementById('btnCriar').addEventListener('click', async () => {
   const nome = document.getElementById('nome').value.trim();
   const descricao = document.getElementById('descricao').value.trim();
   const estoque = parseInt(document.getElementById('estoque').value) || 0;
+  const categoriaId = parseInt(document.getElementById('categoria').value);
+  const comprimento = parseFloat(document.getElementById('comprimento').value) || 0;
+  const altura = parseFloat(document.getElementById('altura').value) || 0;
+  const largura = parseFloat(document.getElementById('largura').value) || 0;
+  const peso = parseFloat(document.getElementById('peso').value) || 0;
   const resultBox = document.getElementById('resultCriar');
   const btn = document.getElementById('btnCriar');
 
@@ -165,7 +191,10 @@ document.getElementById('btnCriar').addEventListener('click', async () => {
       catalogosPayload.push({
         id: parseInt(inp.dataset.catalogoId),
         ativado: true,
-        precos: { preco: val }
+        precos: {
+          preco: val,
+          promocional: { ativado: false }
+        }
       });
     }
   });
@@ -179,6 +208,8 @@ document.getElementById('btnCriar').addEventListener('click', async () => {
     nome: nome,
     descricao: descricao,
     ativado: true,
+    categorias: categoriaId ? [categoriaId] : [],
+    dimensoes: { comprimento, altura, largura, peso },
     estoque: { controlar_estoque: true, estoque: estoque },
     catalogos: catalogosPayload
   };
@@ -198,7 +229,7 @@ document.getElementById('btnCriar').addEventListener('click', async () => {
     if (res.ok) {
       showResult('ok', 'Produto cadastrado com sucesso!\n\n' + JSON.stringify(data, null, 2).slice(0, 1000));
     } else {
-      showResult('err', 'Erro ao cadastrar. Status ' + res.status + '\n\n' + JSON.stringify(data, null, 2).slice(0, 1000));
+      showResult('err', 'Erro ao cadastrar. Status ' + res.status + '\n\n' + JSON.stringify(data, null, 2).slice(0, 1200));
     }
   } catch (e) {
     showResult('err', 'Falha na requisição:\n' + e.message);
@@ -215,7 +246,7 @@ function showResult(type, msg) {
   box.style.display = 'block';
 }
 
-carregarCatalogos();
+carregarTudo();
 </script>
 </body>
 </html>
