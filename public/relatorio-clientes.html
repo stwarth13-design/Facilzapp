@@ -90,31 +90,52 @@ function dataISO(offsetDias) {
   return d.toISOString().split('T')[0];
 }
 
+
+async function buscarTudo(baseUrl, statusElId, label) {
+  let pagina = 1;
+  let todos = [];
+  let totalPaginas = 1;
+  const maxPaginas = 30;
+
+  while (pagina <= totalPaginas && pagina <= maxPaginas) {
+    const sep = baseUrl.includes('?') ? '&' : '?';
+    const url = `${baseUrl}${sep}length=100&page=${pagina}`;
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(`Erro ao buscar ${label} (página ${pagina}): ${JSON.stringify(data)}`);
+    }
+
+    const lote = data.data || [];
+    todos = todos.concat(lote);
+
+    if (data.total) {
+      totalPaginas = Math.ceil(data.total / 100);
+    } else if (lote.length < 100) {
+      totalPaginas = pagina;
+    }
+
+    document.getElementById(statusElId).innerHTML =
+      `<div class="loading">Buscando ${label} (página ${pagina} de ${totalPaginas})... ${todos.length} registros até agora.</div>`;
+
+    pagina++;
+  }
+
+  return todos;
+}
+
 async function carregar() {
   const dataInicio = dataISO(-365);
   const dataFim = dataISO(0);
   document.getElementById('periodo').textContent = `Baseado em pedidos dos últimos 12 meses (${dataInicio.split('-').reverse().join('/')} até ${dataFim.split('-').reverse().join('/')})`;
 
   try {
-    const [resClientes, resPedidos] = await Promise.all([
-      fetch(`${API_BASE}/clientes?length=100`),
-      fetch(`${API_BASE}/pedidos?filtros[data_inicial]=${dataInicio}&filtros[data_final]=${dataFim}&length=100`)
-    ]);
+    document.getElementById('conteudo').innerHTML = '<div class="loading">Buscando clientes (página 1)...</div>';
+    const clientes = await buscarTudo(`${API_BASE}/clientes`, 'conteudo', 'clientes');
 
-    const dataClientes = await resClientes.json();
-    const dataPedidos = await resPedidos.json();
-
-    if (!resClientes.ok) {
-      document.getElementById('conteudo').innerHTML = `<div class="err">Erro ao carregar clientes:\n${JSON.stringify(dataClientes, null, 2)}</div>`;
-      return;
-    }
-    if (!resPedidos.ok) {
-      document.getElementById('conteudo').innerHTML = `<div class="err">Erro ao carregar pedidos:\n${JSON.stringify(dataPedidos, null, 2)}</div>`;
-      return;
-    }
-
-    const clientes = dataClientes.data || [];
-    const pedidos = dataPedidos.data || [];
+    document.getElementById('conteudo').innerHTML = '<div class="loading">Buscando pedidos (página 1)...</div>';
+    const pedidos = await buscarTudo(`${API_BASE}/pedidos?filtros[data_inicial]=${dataInicio}&filtros[data_final]=${dataFim}`, 'conteudo', 'pedidos');
 
     // Agrega gasto e contagem de pedidos por cliente
     const gastoPorCliente = {};
